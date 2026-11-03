@@ -1,0 +1,4 @@
+interface:
+  display_name: "Weekly Report Assistant"
+  short_description: "整理每周工作与量化成果，按四栏格式填写飞书汇报并保存草稿，不提交"
+  default_prompt: "使用 $weekly-report-assistant，根据本周工作记录整理周报，填写到我提供的飞书汇报链接，保存并刷新核验草稿，不提交。"
