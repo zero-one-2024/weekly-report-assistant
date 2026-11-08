@@ -8,7 +8,7 @@ A Codex skill that turns your weekly work notes into a Chinese weekly report and
 
 - Collects work notes, explicitly referenced Codex chats, local records and supplied files, then groups related work by project rather than by day.
 - Uses verifiable quantities, versions, deliverables and test results. Missing measurements remain unknown; it does not invent improvements or count earlier work again.
-- Keeps four report sections in a fixed order, with numbered **bold titles immediately followed by regular text in the same paragraph** and a blank line between items.
+- Keeps four report sections in a fixed order, with numbered **bold titles on their own line, without a trailing colon**, followed by regular body text on the next line. There is no blank line between the title and body, and one blank line between items.
 - Saves a local draft before editing Feishu, preserves your changes, and checks text, formatting and persistence after refreshing the page.
 - Stops at a saved draft. It does not submit reports, change recipients or create a recurring automation.
 
@@ -60,9 +60,11 @@ Dates use `Asia/Shanghai`. An explicit reporting period takes precedence over th
 
 This is a **fictional formatting example**, not a record of actual work:
 
-**1. 项目文档编制：**完成2册独立手册，分别输出Word和PDF；监管方V1.0共10章、50页，项目方V1.0共8章、40页。
+**1. 项目文档编制**\
+完成2册独立手册，分别输出Word和PDF；监管方V1.0共10章、50页，项目方V1.0共8章、40页。
 
-**2. 专项测试：**执行20项用例，通过15项、失败3项、阻塞2项，形成3项待修复问题。
+**2. 专项测试**\
+执行20项用例，通过15项、失败3项、阻塞2项，形成3项待修复问题。
 
 In Feishu, titles must be actual bold text, not visible Markdown asterisks. The browser workflow checks this after saving and refreshing.
 
@@ -88,7 +90,7 @@ The helper validates structure and source references, not whether a source suppo
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
-The suite covers all four fields, same-paragraph bold formatting, blank-line spacing, HTML escaping, UTF-16 offsets, source references, Beijing time conversion, exact URL preservation, overwrite protection, backups and CLI behavior. It also executes the JSON example in the documentation.
+The suite covers all four fields, bold titles on their own line with no trailing colon, body text on the next line, blank-line spacing, HTML escaping, UTF-16 offsets, source references, Beijing time conversion, exact URL preservation, overwrite protection, backups and CLI behavior. It also executes the JSON example in the documentation.
 
 These are local tests. A real Feishu editing session is still needed to verify browser access, editor behavior and draft persistence. No test accesses or submits a real report.
 

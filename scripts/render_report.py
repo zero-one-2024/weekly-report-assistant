@@ -31,7 +31,7 @@ def single_line(value, location):
     if not isinstance(value, str) or not value.strip():
         raise DraftError(f"{location} 必须是非空字符串")
     if any(char in value for char in "\n\r\u2028\u2029"):
-        raise DraftError(f"{location} 不得换行；标题和正文必须同段")
+        raise DraftError(f"{location} 不得包含字段内换行；标题和正文的分行由工具生成")
     if any(ord(char) < 32 for char in value):
         raise DraftError(f"{location} 不得包含控制字符")
     return value.strip()
@@ -87,6 +87,7 @@ def render_field(key, value, sources, summary):
             if unknown:
                 raise DraftError(f"{location} 包含未知字段：{sorted(unknown)}")
             title = single_line(item.get("title"), f"{location}.title")
+            title = single_line(title.rstrip("：: "), f"{location}.title")
             body = single_line(item.get("body"), f"{location}.body")
             ids = item.get("source_ids")
             if (not isinstance(ids, list) or not ids
@@ -99,11 +100,11 @@ def render_field(key, value, sources, summary):
                 raise DraftError("suggested 只用于下周计划")
             if suggested and "建议，待确认" not in title:
                 title += "（建议，待确认）"
-            heading = f"{number}. {title.rstrip('：:')}："
+            heading = f"{number}. {title}"
             paragraphs.append((
-                heading + body,
-                f"**{markdown_text(heading)}**{markdown_text(body)}",
-                f"<strong>{escape(heading)}</strong>{escape(body)}",
+                heading + "\n" + body,
+                f"**{markdown_text(heading)}**\\\n{markdown_text(body)}",
+                f"<strong>{escape(heading)}</strong><br>{escape(body)}",
                 heading,
             ))
             source_rows.append(f"- {SECTION_LABELS[key]} / {number}. {title}：{', '.join(ids)}")

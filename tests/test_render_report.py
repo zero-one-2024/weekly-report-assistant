@@ -57,6 +57,8 @@ class ParagraphReader(HTMLParser):
             self.parts = []
         if tag == "strong":
             self.strong = True
+        if tag == "br" and self.parts:
+            self.parts.append(("\n", False))
 
     def handle_endtag(self, tag):
         if tag == "strong":
@@ -78,24 +80,25 @@ class ReportRenderingTests(unittest.TestCase):
             "本周工作/项目推进重点进展&总结", "下周工作计划与安排", "需要协调与帮助", "其他需要同步的事项或说明",
         ])
 
-    def test_titles_and_bodies_share_paragraph_and_only_titles_are_bold(self):
+    def test_titles_are_bold_on_their_own_line_with_body_immediately_below(self):
         _, payload = renderer.build_report(sample())
         parser = ParagraphReader()
         parser.feed(payload["fields"]["progress"]["html"])
         self.assertEqual(parser.paragraphs[0], [(sample()["summary"], False)])
         self.assertEqual(parser.paragraphs[1], [])
         self.assertEqual(parser.paragraphs[2], [
-            ("1. 文档编制：", True), ("完成2册独立手册，分别输出Word及PDF。", False),
+            ("1. 文档编制", True), ("\n", False), ("完成2册独立手册，分别输出Word及PDF。", False),
         ])
         self.assertEqual(parser.paragraphs[3], [])
-        self.assertEqual(parser.paragraphs[4][0], ("2. 专项测试：", True))
+        self.assertEqual(parser.paragraphs[4][0], ("2. 专项测试", True))
 
     def test_markdown_and_plaintext_keep_blank_lines_between_items(self):
         _, payload = renderer.build_report(sample())
         field = payload["fields"]["progress"]
         self.assertEqual(len(field["text"].split("\n\n")), 3)
-        self.assertTrue(all("\n" not in item for item in field["text"].split("\n\n")))
-        self.assertIn("**1. 文档编制：**完成2册", field["markdown"])
+        self.assertEqual(field["text"].split("\n\n")[1], "1. 文档编制\n完成2册独立手册，分别输出Word及PDF。")
+        self.assertEqual(field["text"].split("\n\n")[2], "2. 专项测试\n执行20项用例，通过15项、失败3项、阻塞2项；尚未部署。")
+        self.assertIn("**1. 文档编制**\\\n完成2册", field["markdown"])
         self.assertNotIn("**", field["text"])
 
     def test_unsafe_html_and_markup_remain_literal_text(self):
@@ -109,7 +112,7 @@ class ReportRenderingTests(unittest.TestCase):
         parser.feed(field["html"])
         self.assertNotIn("script", parser.tags)
         self.assertNotIn("img", parser.tags)
-        self.assertEqual(parser.paragraphs[2], [(f"1. {title}：", True), (body, False)])
+        self.assertEqual(parser.paragraphs[2], [(f"1. {title}", True), ("\n", False), (body, False)])
         self.assertIn(r"\*\*原文\*\*", field["markdown"])
         self.assertIn(r"\[来源\]", field["markdown"])
 
@@ -121,7 +124,9 @@ class ReportRenderingTests(unittest.TestCase):
         field = payload["fields"]["progress"]
         encoded = field["text"].encode("utf-16-le")
         headings = [encoded[span["start"] * 2:span["end"] * 2].decode("utf-16-le") for span in field["title_spans"]]
-        self.assertEqual(headings, ["1. 文档📘编制：", "2. 专项测试："])
+        self.assertEqual(headings, ["1. 文档📘编制", "2. 专项测试"])
+        for span in field["title_spans"]:
+            self.assertEqual(encoded[span["end"] * 2:span["end"] * 2 + 2].decode("utf-16-le"), "\n")
 
     def test_facts_and_stage_limits_are_preserved_without_invented_outcomes(self):
         _, payload = renderer.build_report(sample())
@@ -138,8 +143,8 @@ class ReportRenderingTests(unittest.TestCase):
         })
         _, payload = renderer.build_report(data)
         text = payload["fields"]["plans"]["text"]
-        self.assertIn("1. 补齐操作配图（建议，待确认）：", text)
-        self.assertIn("2. 参加会议：按用户安排参会。", text)
+        self.assertIn("1. 补齐操作配图（建议，待确认）\n根据遗留事项补充配图", text)
+        self.assertIn("2. 参加会议\n按用户安排参会。", text)
         self.assertEqual(text.count("建议，待确认"), 1)
 
     def test_pending_sources_and_metadata_never_leak_into_form_fields(self):
@@ -181,14 +186,47 @@ class ReportRenderingTests(unittest.TestCase):
             self.assertEqual(payload["fields"][key]["text"], "无")
             self.assertEqual(payload["fields"][key]["html"], "<p>无</p>")
 
-    def test_coordination_items_are_numbered_and_bold_in_one_paragraph(self):
+    def test_coordination_items_put_body_on_next_line_without_a_colon(self):
         data = sample()
         data["sections"]["coordination"] = [{
             "title": "协调演示记录", "body": "请业务人员提供配图所需的演示记录。", "source_ids": ["s1"],
         }]
         _, payload = renderer.build_report(data)
         self.assertEqual(payload["fields"]["coordination"]["html"],
-                         "<p><strong>1. 协调演示记录：</strong>请业务人员提供配图所需的演示记录。</p>")
+                         "<p><strong>1. 协调演示记录</strong><br>请业务人员提供配图所需的演示记录。</p>")
+
+    def test_numbered_items_in_all_four_sections_use_the_same_line_spacing(self):
+        data = sample()
+        data["summary"] = ""
+        for key in renderer.SECTION_LABELS:
+            data["sections"][key] = [
+                {"title": "第一项", "body": "完成2项检查。", "source_ids": ["s1"]},
+                {"title": "第二项", "body": "形成1份记录。", "source_ids": ["s1"]},
+            ]
+        _, payload = renderer.build_report(data)
+        for key, field in payload["fields"].items():
+            with self.subTest(section=key):
+                self.assertEqual(field["text"], "1. 第一项\n完成2项检查。\n\n2. 第二项\n形成1份记录。")
+                parser = ParagraphReader()
+                parser.feed(field["html"])
+                self.assertEqual(parser.paragraphs, [
+                    [("1. 第一项", True), ("\n", False), ("完成2项检查。", False)], [],
+                    [("2. 第二项", True), ("\n", False), ("形成1份记录。", False)],
+                ])
+                encoded = field["text"].encode("utf-16-le")
+                headings = [encoded[span["start"] * 2:span["end"] * 2].decode("utf-16-le") for span in field["title_spans"]]
+                self.assertEqual(headings, ["1. 第一项", "2. 第二项"])
+
+    def test_legacy_trailing_colons_are_removed_before_the_suggestion_label(self):
+        for suffix in ["：", ":", " ：: "]:
+            for suggested in [False, True]:
+                data = sample()
+                data["sections"]["plans"][0].update(title="补齐操作配图" + suffix, suggested=suggested)
+                _, payload = renderer.build_report(data)
+                title = "1. 补齐操作配图" + ("（建议，待确认）" if suggested else "")
+                with self.subTest(suffix=suffix, suggested=suggested):
+                    self.assertEqual(payload["fields"]["plans"]["text"].split("\n", 1)[0], title)
+                    self.assertIn(f"<strong>{title}</strong><br>", payload["fields"]["plans"]["html"])
 
     def test_invalid_inputs_fail_instead_of_silently_dropping_material(self):
         invalid = []
@@ -212,6 +250,7 @@ class ReportRenderingTests(unittest.TestCase):
             ("multiline body", lambda d: d["sections"]["progress"][0].update(body="正文\r\n下一段")),
             ("unicode newline", lambda d: d["sections"]["progress"][0].update(body="正文\u2028下一段")),
             ("empty body", lambda d: d["sections"]["progress"][0].update(body="")),
+            ("colon-only title", lambda d: d["sections"]["progress"][0].update(title=" ：: ")),
             ("string boolean", lambda d: d["sections"]["plans"][0].update(suggested="false")),
             ("suggested result", lambda d: d["sections"]["progress"][0].update(suggested=True)),
         ]:
